@@ -1,0 +1,3 @@
+# Serialize GPU models in worker processes
+
+The application will never own a CUDA model in its main process; it grants one exclusive GPU lease at a time to a disposable child process for transcription, embedding, or semantic evaluation. A stage releases that lease only after the owning process tree exits and GPU memory returns near its recorded baseline, blocking the next stage if release cannot be verified; we reject in-process load and unload because independent runtimes can retain allocator state, accepting model startup overhead in exchange for deterministic VRAM ownership, cancellation, and recovery.

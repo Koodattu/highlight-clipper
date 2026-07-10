@@ -1,3 +1,6 @@
+# Repository-local runtime data: models, media, databases, binaries, and artifacts.
+/workdir/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
