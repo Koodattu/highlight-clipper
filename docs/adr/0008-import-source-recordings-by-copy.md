@@ -1,0 +1,3 @@
+# Import source recordings by validated copy
+
+Milestone 1 probes/selects streams, copies a regular local media file into the repository-local Work Directory through a hashed partial file, commits its authoritative Media Timeline and aligned proxy/audio, then registers the imported Source Recording without moving, hard-linking, or later modifying the caller's file. We reject external path references because deletion or mutation would invalidate labels and Exports, and reject automatic moves or hard links because they create surprising ownership and mutation behavior, accepting import/normalization time and duplicate disk use for a self-contained reproducible project.

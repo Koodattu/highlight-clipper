@@ -1,0 +1,3 @@
+# Preserve editorial history across reanalysis
+
+Analysis Runs, Clip Proposals, Queue Snapshots, Editorial Decisions, Boundary Edits, and Exports are immutable or append-only revisions. A different Source Recording or changed profile/model/prompt/retrieval/ranking policy creates only the affected analysis generations, while changed rendering settings create a new Export without rewriting analysis. We reject a mutable “current result” model because reanalysis would silently detach or corrupt the creator's most valuable learning data, accepting additional lineage and storage in exchange for reproducibility, comparison, undo, and safe future personalization.
