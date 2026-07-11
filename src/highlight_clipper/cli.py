@@ -65,6 +65,11 @@ def _parser() -> argparse.ArgumentParser:
     analyze.add_argument("source_id")
     analyze.add_argument("--fake", action="store_true", default=None, help="Use deterministic offline fake adapters")
     analyze.add_argument("--asr", choices=["whisper-turbo", "whisper-large-v3"])
+    analyze.add_argument(
+        "--asr-language",
+        choices=["fi", "en"],
+        help="Tell faster-whisper the recording language; omit for automatic detection",
+    )
     analyze.add_argument("--embedding", choices=["qwen3-embedding-0.6b"])
     analyze.add_argument(
         "--evaluator",
@@ -221,6 +226,7 @@ def main(argv: list[str] | None = None) -> int:
                     for value in (
                         arguments.fake,
                         arguments.asr,
+                        arguments.asr_language,
                         arguments.embedding,
                         arguments.evaluator,
                         arguments.context_size,
@@ -242,6 +248,7 @@ def main(argv: list[str] | None = None) -> int:
                 selection = AnalysisSelection(
                     mode="fake" if arguments.fake else "real",
                     asr_profile=arguments.asr or "whisper-turbo",
+                    asr_language=arguments.asr_language,
                     embedding_profile=arguments.embedding or "qwen3-embedding-0.6b",
                     evaluator_profile=arguments.evaluator or "qwen36-35b-a3b",
                     evaluator_context_size=(

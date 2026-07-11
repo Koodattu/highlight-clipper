@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from highlight_clipper.adapters.llama_cpp import LlamaCppEvaluatorAdapter, LlamaEvaluatorProfile
+from highlight_clipper.composition import selection_from_configuration
 from highlight_clipper.model_profiles import get_model_profile, load_catalog
 from highlight_clipper.ports import CandidateEvaluationOutcome, EvaluatorExecutionError
 from highlight_clipper.setup_assets import verify_asset_directory
@@ -242,6 +243,10 @@ class LlamaAdapterTests(unittest.TestCase):
 
 
 class ModelCatalogTests(unittest.TestCase):
+    def test_asr_language_round_trips_through_persisted_run_configuration(self) -> None:
+        self.assertEqual(selection_from_configuration({"asr_language": "fi"}).asr_language, "fi")
+        self.assertIsNone(selection_from_configuration({}).asr_language)
+
     def test_all_requested_evaluators_have_typed_execution_and_mtp_profiles(self) -> None:
         expected = {
             "qwen36-35b-a3b": "embedded",

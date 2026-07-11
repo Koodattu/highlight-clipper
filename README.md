@@ -36,6 +36,12 @@ Use **Sources → Run local analysis** for the default real pipeline. The equiva
 .\.venv\Scripts\highlight-clipper.exe analyze <source_recording_id>
 ```
 
+For a recording with a known Finnish language track, pass the language code to faster-whisper explicitly:
+
+```powershell
+.\.venv\Scripts\highlight-clipper.exe analyze <source_recording_id> --asr-language fi
+```
+
 Only one GPU model is resident at a time: the ASR worker loads, checkpoints and exits; embeddings run in a disposable CPU worker; then the managed llama.cpp server loads, evaluates and exits. A Windows named mutex and Job Object prevent overlapping owned GPU workers and clean up their process trees on cancellation or failure.
 
 The default queue target adapts to source length (`min(30, max(10, ceil(3 × source hours)))`) and applies category, 15-minute-section, temporal-overlap, and content-similarity diversity. Review exposes evidence, structure, reasons against selection, live edited-boundary waveforms, explicit Previous/Next navigation, and a Maybe-only filter. An edit outside evaluated context can launch a successor analysis for an interval up to 240 seconds without mutating the old proposal, decision, or queue.

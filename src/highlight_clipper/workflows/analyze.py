@@ -53,6 +53,7 @@ from ..workers.supervisor import WorkerCancelled, WorkerError
 @dataclass(frozen=True, slots=True)
 class AnalysisConfig:
     asr_profile: str = "fake-v1"
+    asr_language: str | None = None
     embedding_profile: str = "none"
     evaluator_profile: str = "fake-v1"
     evaluator_context_size: int = 32_768
@@ -67,6 +68,12 @@ class AnalysisConfig:
     max_queue_size: int = 30
     max_prompt_tokens_per_source_hour: int = 100_000
     max_prompt_tokens_per_run: int = 1_000_000
+
+    def persisted(self) -> dict[str, object]:
+        configuration = asdict(self)
+        if self.asr_language is None:
+            configuration.pop("asr_language")
+        return configuration
 
 
 @dataclass(frozen=True, slots=True)
@@ -360,7 +367,7 @@ class AnalysisWorkflow:
             raise RuntimeError("A Creator Profile revision is required before analysis")
 
         run_id = resume_run_id or new_id("analysis")
-        config_json = asdict(self.configuration)
+        config_json = self.configuration.persisted()
         if requested_more_run is not None:
             parent_configuration = json.loads(str(requested_more_run["configuration_json"]))
             if parent_configuration.get("budget_tier", "default") != "default":
@@ -563,7 +570,9 @@ class AnalysisWorkflow:
         completed_value: Callable[[], T] | None = None,
     ) -> T:
         input_fingerprint = self._stage_input_fingerprint(run_id, name)
-        configuration_fingerprint = fingerprint({"stage": name, "configuration": asdict(self.configuration)})
+        configuration_fingerprint = fingerprint(
+            {"stage": name, "configuration": self.configuration.persisted()}
+        )
         prior = self.database.fetch_one(
             "SELECT * FROM stage_attempts WHERE scope_type = 'analysis' AND scope_id = ? "
             "AND stage_name = ? ORDER BY attempt_number DESC LIMIT 1",
@@ -1022,9 +1031,13 @@ class AnalysisWorkflow:
         )
         segments = transcription.segments
         previous_end = 0
-        producer_fingerprint = fingerprint(
-            {"asr_profile": self.configuration.asr_profile, "source_sha256": source["sha256"]}
-        )
+        producer_configuration = {
+            "asr_profile": self.configuration.asr_profile,
+            "source_sha256": source["sha256"],
+        }
+        if self.configuration.asr_language is not None:
+            producer_configuration["asr_language"] = self.configuration.asr_language
+        producer_fingerprint = fingerprint(producer_configuration)
         raw_directory = self.database.settings.work_dir / "artifacts" / "asr" / run_id
         raw_directory.mkdir(parents=True, exist_ok=True)
         raw_path = raw_directory / "raw-transcription.json"
@@ -1126,7 +1139,14 @@ class AnalysisWorkflow:
                 owner_type="analysis",
                 owner_id=run_id,
                 source_recording_id=str(source["id"]),
-                configuration={"asr_profile": self.configuration.asr_profile},
+                configuration={
+                    "asr_profile": self.configuration.asr_profile,
+                    **(
+                        {"asr_language": self.configuration.asr_language}
+                        if self.configuration.asr_language is not None
+                        else {}
+                    ),
+                },
                 require_hash=True,
                 precomputed_sha256=raw_digest,
                 precomputed_size=raw_path.stat().st_size,

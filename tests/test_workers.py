@@ -106,10 +106,12 @@ class AsrIdentityTests(unittest.TestCase):
                 model_directory,
                 model_profile_id=profile.profile_id,
                 model_revision=profile.revision,
+                language="fi",
                 supervisor=supervisor,  # type: ignore[arg-type]
             )
             adapter.transcribe(first)
             adapter.transcribe(second)
+            self.assertEqual(supervisor.requests[0]["language"], "fi")
             self.assertNotEqual(supervisor.requests[0]["fingerprint"], supervisor.requests[1]["fingerprint"])
             self.assertNotEqual(supervisor.requests[0]["checkpoint_path"], supervisor.requests[1]["checkpoint_path"])
 

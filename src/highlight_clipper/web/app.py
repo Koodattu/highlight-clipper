@@ -63,6 +63,7 @@ class ProfileRequest(BaseModel):
 class AnalysisRequest(BaseModel):
     mode: Literal["real", "fake"] = "real"
     asr_profile: Literal["whisper-turbo", "whisper-large-v3"] = "whisper-turbo"
+    asr_language: Literal["fi", "en"] | None = None
     embedding_profile: Literal["qwen3-embedding-0.6b"] = "qwen3-embedding-0.6b"
     evaluator_profile: Literal["qwen36-35b-a3b", "qwen36-27b", "gemma4-31b", "gemma4-26b-a4b"] = "qwen36-35b-a3b"
     evaluator_context_size: int = Field(default=32_768, ge=8_192, le=262_144)
@@ -363,6 +364,7 @@ def create_app(
         selection = AnalysisSelection(
             mode=payload.mode,
             asr_profile=payload.asr_profile,
+            asr_language=payload.asr_language,
             embedding_profile=payload.embedding_profile,
             evaluator_profile=payload.evaluator_profile,
             evaluator_context_size=payload.evaluator_context_size,

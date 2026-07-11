@@ -18,6 +18,7 @@ from .workflows.analyze import AnalysisConfig, AnalysisWorkflow
 class AnalysisSelection:
     mode: str = "real"
     asr_profile: str = "whisper-turbo"
+    asr_language: str | None = None
     embedding_profile: str = "qwen3-embedding-0.6b"
     evaluator_profile: str = "qwen36-35b-a3b"
     evaluator_context_size: int = 32_768
@@ -31,6 +32,11 @@ def selection_from_configuration(configuration: dict[str, object]) -> AnalysisSe
     return AnalysisSelection(
         mode=mode,
         asr_profile=str(configuration.get("asr_profile", "whisper-turbo")),
+        asr_language=(
+            str(configuration["asr_language"])
+            if configuration.get("asr_language") is not None
+            else None
+        ),
         embedding_profile=str(configuration.get("embedding_profile", "qwen3-embedding-0.6b")),
         evaluator_profile=str(configuration.get("evaluator_profile", "qwen36-35b-a3b")),
         evaluator_context_size=int(configuration.get("evaluator_context_size", 32_768)),
@@ -96,7 +102,7 @@ def build_analysis_workflow(
             "asset": asr_profile.identity_fingerprint,
             "device": "cuda",
             "compute_type": "float16",
-            "language": None,
+            "language": selection.asr_language,
             "chunk_seconds": 900,
             "overlap_seconds": 15,
             "vad_parameters": FASTER_WHISPER_VAD_PARAMETERS,
@@ -136,6 +142,7 @@ def build_analysis_workflow(
             asr_profile.local_directory(database.settings),
             model_profile_id=asr_profile.profile_id,
             model_revision=asr_profile.revision,
+            language=selection.asr_language,
         ),
         LlamaCppEvaluatorAdapter(database.settings, evaluator_profile),
         embedding=QwenEmbeddingAdapter(
@@ -144,6 +151,7 @@ def build_analysis_workflow(
         ),
         configuration=AnalysisConfig(
             asr_profile=selection.asr_profile,
+            asr_language=selection.asr_language,
             embedding_profile=selection.embedding_profile,
             evaluator_profile=selection.evaluator_profile,
             evaluator_context_size=selection.evaluator_context_size,
