@@ -140,6 +140,8 @@ The common server arguments are:
 --parallel 1
 --n-gpu-layers all
 --fit off
+--verbosity 4
+--reasoning off
 --flash-attn on
 --cache-type-k q8_0
 --cache-type-v q8_0
@@ -149,7 +151,7 @@ The common server arguments are:
 
 These names follow the current [llama-server argument reference](https://github.com/ggml-org/llama.cpp/blob/master/tools/server/README.md). The application checks `--help` during setup so a changed or missing flag fails before processing a long recording.
 
-Sampling, thinking, seed policy, and response schema are explicit Model Profile/request fields rather than server defaults. The implemented Qwen profiles use temperature 0.7, top-p 0.8, top-k 20, min-p 0, presence penalty 1.5, fixed seed 3407, and `enable_thinking: false`. The Gemma profiles use temperature 1.0, top-p 0.95, top-k 64, min-p 0, no presence penalty, fixed seed 3407, and no chat-template kwargs. Every current profile has a 2,048-token output cap and requests `reasoning_format: auto` so the server separates reasoning when present.
+Sampling, thinking, seed policy, and response schema are explicit Model Profile/request fields rather than server defaults. The implemented Qwen profiles use temperature 0.7, top-p 0.8, top-k 20, min-p 0, presence penalty 1.5, fixed seed 3407, and `enable_thinking: false`. The Gemma profiles use temperature 1.0, top-p 0.95, top-k 64, min-p 0, no presence penalty, fixed seed 3407, and no chat-template kwargs. Managed baseline runs launch llama.cpp with reasoning disabled and request `reasoning_format: auto`; every current profile has a 2,048-token output cap. Rendered-prompt preflight uses `/tokenize` with the loaded model's special-token policy so model-inserted tokens such as Gemma's BOS are included in context and budget accounting.
 
 The user's earlier 0.6/0.95/20/0 Qwen command remains a useful manual observation, but the committed non-thinking settings follow the current model-profile guidance and are the reproducible baseline. Multi-seed screening and a bounded-thinking 4,096-reasoning/6,144-total contender remain experiment designs; they are not selectable execution modes yet.
 

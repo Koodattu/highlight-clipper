@@ -35,7 +35,12 @@ from ..timebase import SourceInterval
 from ..workers.supervisor import GpuMutex, WindowsJob, WorkerCancelled, WorkerError, used_vram_mib
 
 FULL_GPU_OFFLOAD_ARGUMENTS = ("--n-gpu-layers", "all", "--fit", "off")
+GPU_OFFLOAD_LOG_ARGUMENTS = ("--verbosity", "4")
 GPU_OFFLOAD_PATTERN = re.compile(r"offloaded\s+(\d+)/(\d+)\s+layers to GPU", re.IGNORECASE)
+REASONING_FORMAT = "auto"
+REASONING_MODE = "off"
+REASONING_ARGUMENTS = ("--reasoning", REASONING_MODE)
+TOKENIZE_ADD_SPECIAL = True
 
 PREFERRED_DURATION_US = {
     ProposalCategory.REACTION: (15_000_000, 60_000_000),
@@ -190,6 +195,8 @@ class ManagedLlamaServer:
             "--n-predict",
             str(self.profile.output_tokens),
             *FULL_GPU_OFFLOAD_ARGUMENTS,
+            *GPU_OFFLOAD_LOG_ARGUMENTS,
+            *REASONING_ARGUMENTS,
             "--flash-attn",
             "on",
             "--cache-type-k",
@@ -480,7 +487,7 @@ class LlamaCppEvaluatorAdapter:
         tokens = self.server.request(
             "POST",
             "/tokenize",
-            {"content": rendered, "add_special": False, "parse_special": True},
+            {"content": rendered, "add_special": TOKENIZE_ADD_SPECIAL, "parse_special": True},
             timeout_seconds=60,
         )["tokens"]
         return str(rendered), len(tokens)
@@ -507,7 +514,7 @@ class LlamaCppEvaluatorAdapter:
                 "seed": self.profile.seed,
                 "stream": False,
                 "chat_template_kwargs": self.profile.chat_template_kwargs,
-                "reasoning_format": "auto",
+                "reasoning_format": REASONING_FORMAT,
                 "response_format": {
                     "type": "json_schema",
                     "json_schema": {

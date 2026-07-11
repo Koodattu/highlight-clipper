@@ -5,7 +5,13 @@ from dataclasses import dataclass
 
 from .adapters.fake import FakeAsrAdapter, FakeEvaluatorAdapter
 from .adapters.faster_whisper import FASTER_WHISPER_VAD_PARAMETERS, FasterWhisperAdapter
-from .adapters.llama_cpp import LlamaCppEvaluatorAdapter, LlamaEvaluatorProfile
+from .adapters.llama_cpp import (
+    REASONING_FORMAT,
+    REASONING_MODE,
+    TOKENIZE_ADD_SPECIAL,
+    LlamaCppEvaluatorAdapter,
+    LlamaEvaluatorProfile,
+)
 from .adapters.qwen_embedding import (
     EMBEDDING_ADAPTER_VERSION,
     EMBEDDING_ATTENTION,
@@ -139,6 +145,13 @@ def build_analysis_workflow(
             "presence_penalty": evaluator_profile.presence_penalty,
             "repeat_penalty": evaluator_profile.repeat_penalty,
             "chat_template_kwargs": evaluator_profile.chat_template_kwargs,
+            "prompt_tokenization": {
+                "endpoint": "/tokenize",
+                "add_special": TOKENIZE_ADD_SPECIAL,
+                "parse_special": True,
+            },
+            "reasoning_mode": REASONING_MODE,
+            "reasoning_format": REASONING_FORMAT,
             "seed": evaluator_profile.seed,
             "mtp": evaluator_profile.mtp,
         }

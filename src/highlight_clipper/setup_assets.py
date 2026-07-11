@@ -14,6 +14,31 @@ from .model_profiles import ModelAssetProfile, get_model_profile, load_catalog
 from .runtime import configure_local_caches
 from .settings import Settings
 
+LLAMA_SERVER_REQUIRED_FLAGS = frozenset(
+    {
+        "--api-key",
+        "--cache-type-k",
+        "--cache-type-v",
+        "--ctx-size",
+        "--fit",
+        "--flash-attn",
+        "--gpu-layers",
+        "--host",
+        "--no-mmproj",
+        "--no-ui",
+        "--n-predict",
+        "--offline",
+        "--parallel",
+        "--port",
+        "--reasoning",
+        "--spec-draft-model",
+        "--spec-draft-n-max",
+        "--spec-draft-ngl",
+        "--spec-type",
+        "--verbosity",
+    }
+)
+
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -226,27 +251,7 @@ def install_llama_cpp_runtime(settings: Settings) -> Path:
         env=environment,
         creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
     )
-    required_flags = {
-        "--api-key",
-        "--cache-type-k",
-        "--cache-type-v",
-        "--ctx-size",
-        "--fit",
-        "--flash-attn",
-        "--gpu-layers",
-        "--host",
-        "--no-mmproj",
-        "--no-ui",
-        "--n-predict",
-        "--offline",
-        "--parallel",
-        "--port",
-        "--spec-draft-model",
-        "--spec-draft-n-max",
-        "--spec-draft-ngl",
-        "--spec-type",
-    }
-    missing = sorted(flag for flag in required_flags if flag not in help_result.stdout)
+    missing = sorted(flag for flag in LLAMA_SERVER_REQUIRED_FLAGS if flag not in help_result.stdout)
     if missing:
         raise RuntimeError("Pinned llama.cpp runtime lacks required flags: " + ", ".join(missing))
     files = _tree_manifest(partial)

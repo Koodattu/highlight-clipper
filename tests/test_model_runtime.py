@@ -8,6 +8,8 @@ from pathlib import Path
 
 from highlight_clipper.adapters.llama_cpp import (
     FULL_GPU_OFFLOAD_ARGUMENTS,
+    GPU_OFFLOAD_LOG_ARGUMENTS,
+    REASONING_ARGUMENTS,
     LlamaCppEvaluatorAdapter,
     LlamaEvaluatorProfile,
     ManagedLlamaServer,
@@ -15,14 +17,21 @@ from highlight_clipper.adapters.llama_cpp import (
 from highlight_clipper.composition import selection_from_configuration
 from highlight_clipper.model_profiles import get_model_profile, load_catalog
 from highlight_clipper.ports import CandidateEvaluationOutcome, EvaluatorExecutionError
-from highlight_clipper.setup_assets import verify_asset_directory
+from highlight_clipper.setup_assets import LLAMA_SERVER_REQUIRED_FLAGS, verify_asset_directory
 from highlight_clipper.workers.supervisor import WorkerCancelled
 
 
 class MockLlamaServer:
-    def __init__(self, contents: list[object], *, reported_prompt_tokens: int = 5):
+    def __init__(
+        self,
+        contents: list[object],
+        *,
+        reported_prompt_tokens: int = 5,
+        add_bos_token: bool = False,
+    ):
         self.contents = list(contents)
         self.reported_prompt_tokens = reported_prompt_tokens
+        self.add_bos_token = add_bos_token
         self.completion_calls = 0
         self.started = False
         self.closed = False
@@ -40,8 +49,15 @@ class MockLlamaServer:
                 raise AssertionError("Template options differ from generation options")
             return {"prompt": "one two three four five"}
         if path == "/tokenize":
-            return {"tokens": [1, 2, 3, 4, 5]}
+            self.assert_tokenize_policy(payload)
+            tokens = [1, 2, 3, 4, 5]
+            return {"tokens": [*tokens, 6] if self.add_bos_token else tokens}
         raise AssertionError(path)
+
+    @staticmethod
+    def assert_tokenize_policy(payload) -> None:
+        if payload["add_special"] is not True or payload["parse_special"] is not True:
+            raise AssertionError("Token counting must apply the loaded model's special-token policy")
 
     def request_cancellable(
         self,
@@ -56,6 +72,8 @@ class MockLlamaServer:
         response_format = payload["response_format"]
         if response_format.get("json_schema", {}).get("strict") is not True:
             raise AssertionError("Pinned llama.cpp build requires the OpenAI-style nested JSON schema")
+        if payload.get("reasoning_format") != "auto":
+            raise AssertionError("Reasoning output parsing must match the managed server policy")
         content = self.contents.pop(0)
         if isinstance(content, Exception):
             raise content
@@ -209,6 +227,24 @@ class LlamaAdapterTests(unittest.TestCase):
         self.assertIn("prompt-token parity failed", outcome.raw_response)
         self.assertEqual(server.completion_calls, 1)
 
+    def test_model_bos_policy_is_counted_and_charged_before_generation(self) -> None:
+        server = MockLlamaServer([valid_response()], reported_prompt_tokens=6, add_bos_token=True)
+
+        result = self.adapter(server).evaluate(envelope())
+
+        self.assertEqual(result.disposition, "proposal_set")
+        self.assertEqual(result.metadata["prompt_tokens"], 6)
+        self.assertEqual(server.completion_calls, 1)
+
+    def test_model_bos_policy_is_included_in_prompt_budget_preflight(self) -> None:
+        server = MockLlamaServer([valid_response()], reported_prompt_tokens=6, add_bos_token=True)
+
+        result = self.adapter(server).evaluate(envelope(remaining_prompt_tokens=5))
+
+        self.assertEqual(result.disposition, "input_too_large")
+        self.assertEqual(result.metadata["measured_prompt_tokens"], 6)
+        self.assertEqual(server.completion_calls, 0)
+
     def test_second_invalid_or_unknown_anchor_becomes_inspectable_invalid_profile(self) -> None:
         server = MockLlamaServer([valid_response(start_anchor="unknown"), valid_response(start_anchor="unknown")])
         result = self.adapter(server).evaluate(envelope())
@@ -250,6 +286,9 @@ class LlamaAdapterTests(unittest.TestCase):
 class ModelCatalogTests(unittest.TestCase):
     def test_llama_runtime_requires_and_verifies_full_gpu_offload(self) -> None:
         self.assertEqual(FULL_GPU_OFFLOAD_ARGUMENTS, ("--n-gpu-layers", "all", "--fit", "off"))
+        self.assertEqual(GPU_OFFLOAD_LOG_ARGUMENTS, ("--verbosity", "4"))
+        self.assertEqual(REASONING_ARGUMENTS, ("--reasoning", "off"))
+        self.assertTrue({"--reasoning", "--verbosity"} <= LLAMA_SERVER_REQUIRED_FLAGS)
         ManagedLlamaServer._require_full_gpu_offload(
             "offloaded 47/47 layers to GPU\noffloaded 12/12 layers to GPU",
             expected_models=2,
