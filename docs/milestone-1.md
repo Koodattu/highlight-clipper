@@ -152,7 +152,7 @@ Transcript and audio discovery remain independent so conspicuous audio cannot bu
 - Build deterministic sentence-aligned windows targeting approximately 20, 45, 90, and 180 seconds with half-window strides.
 - Include a cheap lexical baseline and one replaceable multilingual embedding query family.
 - Compare embedding candidates on downstream recall, throughput, instruction sensitivity, memory, and index size rather than leaderboard rank alone.
-- Start embeddings on CPU unless measurement shows that indexing time harms the product budget; a GPU-backed adapter uses the same disposable-worker and GPU-lease contract.
+- Run embeddings on CUDA under the same disposable-worker and GPU-Lease contract as ASR and semantic evaluation; fail instead of falling back to CPU model execution.
 - Begin with category-description lexical/embedding retrieval, topic novelty, and cheap audio peaks. Add quotable-assertion, question/answer, disagreement, prediction/outcome, story-progression, or accepted-example generators only through recorded ablation.
 - Similarity to accepted examples uses only decisions that predate and belong outside the held-out Source Recording.
 
@@ -319,7 +319,7 @@ A more expensive component is promoted only when held-out end-to-end benefit jus
 0. **Implemented:** minimal domain types, integer Source Time conversion, SQLite migrations/lineage, adapter seams, and deterministic media/model fixtures.
 1. **Implemented:** fake happy path, cancellation/checkpoint retry, Creator Profile, Queue Snapshot, review decisions, real-only Boundary Edits, and deterministic export.
 2. **Implemented and fixture-verified:** atomic import, stream selection, FFprobe/FFmpeg timeline scan, proxy/audio/waveform creation, playback, alignment fixtures, and source-aspect export with source metadata stripped.
-3. **Implemented baseline:** chunked faster-whisper Turbo, rolling/block-local energy/change observations, lexical retrieval, CPU Qwen embeddings, fair candidate budgets, section-balanced envelopes, and complete provenance. Held-out ablation remains pending.
+3. **Implemented baseline:** chunked faster-whisper Turbo, rolling/block-local energy/change observations, lexical retrieval, CUDA Qwen embeddings, fair candidate budgets, section-balanced envelopes, and complete provenance. The CUDA embedding path still needs a real-model smoke and held-out ablation.
 4. **Implemented and real-smoked:** managed no-MTP Qwen baseline, strict evidence/anchor/schema validation, profile-aware ordering/diversity, review, and export.
 5. **Partially implemented:** malformed-output, worker cancellation/hang, artifact integrity, orphan reconciliation, process ownership, backup verification/restore (including corrupt-current recovery), local-web security, and private worker-payload cleanup have coverage. Disk-full, crash-at-every-commit-boundary, aggregate capacity planning, media retention, and long soak remain.
 6. **Tooling started; evidence pending:** frozen Reference Moments, language slices, deterministic single-run matching/metrics, and review-time capture exist. The representative pilot corpus, cross-run aggregation, ASR/evaluator screening, budgets, promotion, and sealed recording do not.
@@ -328,7 +328,7 @@ A more expensive component is promoted only when held-out end-to-end benefit jus
 ## Decisions intentionally left empirical
 
 - Winning ASR backend and decoding/chunk settings.
-- Winning embedding model, dimension, instruction, and CPU/GPU placement.
+- Winning embedding model, dimension, instruction, CUDA precision, and batch size.
 - Winning evaluator architecture, quantization, prompt, reasoning mode, sampling, and output budget.
 - Whether any context beyond 32K is useful and deployable on the 24 GB GPU.
 - Whether MTP improves complete candidate-batch latency enough to retain.

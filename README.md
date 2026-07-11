@@ -1,6 +1,6 @@
 # Highlight Clipper
 
-Highlight Clipper is a local-first, evidence-backed highlight retrieval, review, and export application. The first release runs a complete text/audio pipeline on one creator's recordings: immutable import, GPU ASR, CPU transcript embeddings, local llama.cpp evaluation, a human review queue, append-only decisions, and verified exports from the original media.
+Highlight Clipper is a local-first, evidence-backed highlight retrieval, review, and export application. The first release runs a complete text/audio pipeline on one creator's recordings: immutable import, GPU ASR, GPU transcript embeddings, fully GPU-offloaded local llama.cpp evaluation, a human review queue, append-only decisions, and verified exports from the original media.
 
 The current baseline is deliberately useful before adding chat, visual models, or a learned ranker. Those later signals plug into stable evidence, candidate, evaluator, ranking, and renderer contracts instead of replacing creator-owned history.
 
@@ -42,7 +42,7 @@ For a recording with a known Finnish language track, pass the language code to f
 .\.venv\Scripts\highlight-clipper.exe analyze <source_recording_id> --asr-language fi
 ```
 
-Only one GPU model is resident at a time: the ASR worker loads, checkpoints and exits; embeddings run in a disposable CPU worker; then the managed llama.cpp server loads, evaluates and exits. A Windows named mutex and Job Object prevent overlapping owned GPU workers and clean up their process trees on cancellation or failure.
+Only one GPU model is resident at a time: the ASR worker loads, checkpoints and exits; the CUDA embedding worker loads, writes its vectors and exits; then the fully GPU-offloaded managed llama.cpp server loads, evaluates and exits. A Windows named mutex and Job Object serialize all three model stages and clean up their process trees on cancellation or failure.
 
 The default queue target adapts to source length (`min(30, max(10, ceil(3 × source hours)))`) and applies category, 15-minute-section, temporal-overlap, and content-similarity diversity. Review exposes evidence, structure, reasons against selection, live edited-boundary waveforms, explicit Previous/Next navigation, and a Maybe-only filter. An edit outside evaluated context can launch a successor analysis for an interval up to 240 seconds without mutating the old proposal, decision, or queue.
 

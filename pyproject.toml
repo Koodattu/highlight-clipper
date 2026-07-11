@@ -17,7 +17,10 @@ dependencies = [
 
 [project.optional-dependencies]
 asr = ["faster-whisper>=1.1,<2"]
-embeddings = ["sentence-transformers>=5,<6"]
+embeddings = [
+  "sentence-transformers>=5,<6; sys_platform == 'win32'",
+  "torch==2.13.0; sys_platform == 'win32'",
+]
 models = ["huggingface-hub>=0.34,<2"]
 dev = [
   "httpx>=0.28,<1",
@@ -31,6 +34,16 @@ highlight-clipper = "highlight_clipper.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/highlight_clipper"]
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cu130", marker = "sys_platform == 'win32'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-config --strict-markers"

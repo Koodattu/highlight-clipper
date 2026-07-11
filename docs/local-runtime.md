@@ -80,11 +80,11 @@ ASR setup places weights under `workdir/models/asr/<profile>/` and caches under 
 
 ## Embedding profile
 
-The first multilingual embedding integration uses [`Qwen/Qwen3-Embedding-0.6B`](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B) in a disposable CPU worker, with a pinned revision, hashes, tokenizer, query instruction, pooling, normalization, output dimension, dtype, and windowing policy. CPU-first avoids another GPU load/unload phase; its full-recording throughput remains a measured gate rather than an assumption.
+The first multilingual embedding integration uses [`Qwen/Qwen3-Embedding-0.6B`](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B) in a disposable CUDA worker, with a pinned revision, hashes, tokenizer, query instruction, pooling, normalization, output dimension, dtype, and windowing policy. The `embeddings` dependency extra is Windows-only and selects the official CUDA 13.0 PyTorch wheel. Model execution and vector normalization use CUDA with bfloat16 model compute and SDPA; the completed float32 vectors are copied to host memory only for validation and atomic `.npy` persistence. Missing CUDA support or CPU tensor fallback fails the worker.
 
 The required lexical retrieval baseline runs without this model. If the embedding path does not improve held-out end-to-end recall enough to justify indexing time and storage, it is removed from the promoted Milestone 1 profile. [`BAAI/bge-m3`](https://huggingface.co/BAAI/bge-m3) is an optional challenger only after the first complete baseline, not another permanent adapter.
 
-Embedding setup stores the current profile under `workdir/models/embeddings/qwen3-0.6b/`, uses the Work Directory caches, and passes an absolute local path with network access disabled. A future GPU profile uses the same owned-worker and GPU-Lease lifecycle.
+Embedding setup stores the current profile under `workdir/models/embeddings/qwen3-0.6b/`, uses the Work Directory caches, and passes an absolute local path with network access disabled. The worker acquires the same GPU Lease as ASR and llama.cpp; process-tree exit is the unload boundary.
 
 ## Installing llama.cpp
 
@@ -107,11 +107,11 @@ A source build is a developer diagnostic when a required fix has not reached a r
 The real Analysis Run is ordered to protect a 24 GB card:
 
 1. The faster-whisper worker acquires the global GPU mutex, loads its local model lazily, transcribes/checkpoints bounded chunks, and exits.
-2. Qwen transcript embeddings run in a separate CPU worker and exit. The current embedding profile never acquires the GPU mutex.
-3. Only after ASR has exited does the managed llama.cpp server acquire the same mutex, load one selected evaluator, process all pending envelopes for the run, and close in `finally` on success, cancellation, or failure.
-4. Process-tree exit is the unload boundary. Whisper and llama.cpp are never intentionally resident together, and the server is not kept alive between Analysis Runs.
+2. Qwen transcript embeddings acquire the same mutex, run in a separate CUDA worker, persist their vectors, and exit.
+3. Only after embeddings have exited does the managed llama.cpp server acquire the same mutex, fully offload one selected evaluator, process all pending envelopes for the run, and close in `finally` on success, cancellation, or failure.
+4. Process-tree exit is the unload boundary. Whisper, Qwen embeddings, and llama.cpp are never intentionally resident together, and the server is not kept alive between Analysis Runs.
 
-This is the implemented VRAM policy. Future GPU embeddings or visual models must use the same ownership contract rather than creating an independent resident service.
+This is the implemented VRAM policy. Future visual or learned models must use the same ownership contract rather than creating an independent resident service.
 
 Milestone 1 uses a directly managed `llama-server` child process, not an always-running server and not router mode:
 
@@ -123,7 +123,7 @@ Milestone 1 uses a directly managed `llama-server` child process, not an always-
 6. Stop the server, close the Job Object on timeout or cancellation, and wait for the owned process tree to exit.
 7. Release the GPU lease before another GPU worker can start.
 
-The named mutex prevents two local application instances from intentionally owning the GPU concurrently. The owned process tree exiting is the unload boundary. The mutex owner is not persisted in SQLite, and the current llama.cpp adapter does not enforce a before/after WDDM-memory warning policy; external desktop allocations remain a fit risk handled by llama.cpp's `--fit on` and explicit failure.
+The named mutex prevents two local application instances from intentionally owning the GPU concurrently. The owned process tree exiting is the unload boundary. The mutex owner is not persisted in SQLite, and the current llama.cpp adapter does not enforce a before/after WDDM-memory warning policy. The launcher requires full target and drafter offload with fitting disabled, so external desktop allocations can cause an explicit startup failure instead of silent CPU-layer fallback.
 
 The launcher allocates an available loopback port rather than assuming port 8080 is free and never binds the evaluator to `0.0.0.0`. It uses a random per-launch API key and verifies health, requested effective context, and loaded model identity before sending private transcript content. stdout/stderr are written below `workdir/logs/llama.cpp/`; log rotation and a retry for the small port-selection/bind race remain hardening work.
 
@@ -138,8 +138,8 @@ The common server arguments are:
 --ctx-size <promoted-context-cap>
 --n-predict <profile-output-cap>
 --parallel 1
---n-gpu-layers auto
---fit on
+--n-gpu-layers all
+--fit off
 --flash-attn on
 --cache-type-k q8_0
 --cache-type-v q8_0
@@ -214,7 +214,7 @@ The four targets and two Gemma drafters total roughly 69 GB before Hugging Face 
 |---|---|
 | Whisper Turbo | Installed and completed a real CUDA transcription |
 | Whisper large-v3 | Executable through the same adapter; not promoted or compared |
-| Qwen3-Embedding-0.6B | Installed and completed a real CPU embedding run |
+| Qwen3-Embedding-0.6B | Installed; the prior CPU path completed a real run, while the required CUDA path is implemented but not yet hardware-smoked |
 | BGE-M3 | Download-only diagnostic catalog entry |
 | Parakeet v3 | Download-only diagnostic catalog entry; no NeMo adapter |
 | Qwen3.6-35B-A3B | Installed; no-MTP real pipeline completed; embedded-MTP strict-JSON smoke completed |
@@ -328,7 +328,7 @@ For every deployable profile and experiment setting, record:
 
 The fixed screen contains at least 100 Context Envelopes and includes definite/possible references, routine negative material, semantic rejections, and insufficient-context cases. It contains at least 15 Finnish, 15 English, and 15 code-switched envelopes plus at least 10 relevant examples for each proposal category; slices may overlap. First-pass and after-one-repair validity are reported as explicit numerators/denominators overall and per slice. The hard validator accepts zero unknown evidence/Boundary Anchor IDs or invalid intervals; after at most one repair, a valid profile-specific disposition must reach 99% overall and at least 95% in every sufficiently sampled language/category slice.
 
-Initial fit discovery may use `--n-gpu-layers auto --fit on`, but it does not eliminate a model. Before the four-profile screen, each candidate starts from a controlled free-VRAM baseline, records the fit margin, and freezes the successful effective GPU offload or explicit equivalent settings. The same controlled rule applies to finalist comparisons so contemporaneous WDDM use cannot silently confound selection.
+Manual fit discovery may use `--n-gpu-layers auto --fit on` only as a diagnostic. Managed Analysis Runs require `--n-gpu-layers all --fit off`; insufficient VRAM fails startup instead of moving model layers to CPU. Before the four-profile screen, each candidate starts from a controlled free-VRAM baseline and records its full-offload fit margin. The same controlled rule applies to finalist comparisons so contemporaneous WDDM use cannot silently confound selection.
 
 Editorial quality and boundaries must meet the Milestone 1 held-out gates. Full-stage elapsed time, source-hours processed per wall hour, model load/unload, peak RAM/pagefile, disk amplification, evaluator seconds per envelope, and review-time budgets are frozen before profile promotion and the sealed evaluation.
 

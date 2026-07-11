@@ -16,6 +16,10 @@ QUERY_INSTRUCTION = (
     "Instruct: Find transcript passages that contain the requested kind of publishable creator highlight.\n"
     "Query: {query}"
 )
+EMBEDDING_ADAPTER_VERSION = "sentence-transformers-worker-v2"
+EMBEDDING_DEVICE = "cuda"
+EMBEDDING_COMPUTE_DTYPE = "bfloat16"
+EMBEDDING_ATTENTION = "sdpa"
 
 
 def _sha256(path: Path) -> str:
@@ -27,7 +31,7 @@ def _sha256(path: Path) -> str:
 
 
 class QwenEmbeddingAdapter:
-    """Controller-side client for a disposable CPU sentence-transformers worker."""
+    """Controller-side client for a disposable CUDA sentence-transformers worker."""
 
     def __init__(
         self,
@@ -60,7 +64,7 @@ class QwenEmbeddingAdapter:
         self.settings.relative_to_workdir(output_directory)
         request_fingerprint = fingerprint(
             {
-                "adapter": "sentence-transformers-worker-v1",
+                "adapter": EMBEDDING_ADAPTER_VERSION,
                 "model_profile_id": profile.profile_id,
                 "model_revision": profile.revision,
                 "model_manifest_sha256": model_manifest["manifest_sha256"],
@@ -68,6 +72,9 @@ class QwenEmbeddingAdapter:
                 "documents": [(item.key, fingerprint(item.text)) for item in documents],
                 "queries": [(item.key, fingerprint(item.text)) for item in queries],
                 "batch_size": self.batch_size,
+                "device": EMBEDDING_DEVICE,
+                "compute_dtype": EMBEDDING_COMPUTE_DTYPE,
+                "attention_implementation": EMBEDDING_ATTENTION,
             }
         )
         formatted_queries = tuple(
@@ -84,11 +91,13 @@ class QwenEmbeddingAdapter:
                 "queries": [{"key": item.key, "text": item.text} for item in formatted_queries],
                 "output_directory": str(output_directory),
                 "batch_size": self.batch_size,
-                "device": "cpu",
+                "device": EMBEDDING_DEVICE,
+                "compute_dtype": EMBEDDING_COMPUTE_DTYPE,
+                "attention_implementation": EMBEDDING_ATTENTION,
                 "fingerprint": request_fingerprint,
             },
             timeout_seconds=12 * 60 * 60,
-            gpu=False,
+            gpu=True,
             cancellation_requested=cancellation_requested,
             worker_started=worker_started,
         )
@@ -103,6 +112,12 @@ class QwenEmbeddingAdapter:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         if manifest.get("fingerprint") != request_fingerprint:
             raise RuntimeError("Embedding manifest fingerprint does not match its request")
+        if manifest.get("requested_device") != EMBEDDING_DEVICE or not str(
+            manifest.get("effective_device", "")
+        ).startswith("cuda"):
+            raise RuntimeError("Embedding worker did not execute on CUDA")
+        if manifest.get("compute_dtype") != EMBEDDING_COMPUTE_DTYPE:
+            raise RuntimeError("Embedding worker used an unexpected compute dtype")
         if _sha256(vector_path) != manifest.get("vector_sha256"):
             raise RuntimeError("Embedding vector artifact hash does not match its manifest")
         try:
@@ -134,6 +149,14 @@ class QwenEmbeddingAdapter:
                 "model_manifest_sha256": model_manifest["manifest_sha256"],
                 "worker_pid": worker.pid,
                 "elapsed_seconds": worker.elapsed_seconds,
+                "requested_device": manifest["requested_device"],
+                "effective_device": manifest["effective_device"],
+                "compute_dtype": manifest["compute_dtype"],
+                "attention_implementation": manifest["attention_implementation"],
+                "torch_version": manifest["torch_version"],
+                "torch_cuda_version": manifest["torch_cuda_version"],
+                "vram_before_mib": worker.vram_before_mib,
+                "vram_after_mib": worker.vram_after_mib,
                 "vector_sha256": manifest["vector_sha256"],
                 "vector_size_bytes": manifest["vector_size_bytes"],
             },

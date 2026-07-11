@@ -4,6 +4,7 @@ import hashlib
 import json
 import os
 import queue
+import re
 import secrets
 import socket
 import subprocess
@@ -32,6 +33,9 @@ from ..settings import Settings
 from ..setup_assets import verify_asset_directory
 from ..timebase import SourceInterval
 from ..workers.supervisor import GpuMutex, WindowsJob, WorkerCancelled, WorkerError, used_vram_mib
+
+FULL_GPU_OFFLOAD_ARGUMENTS = ("--n-gpu-layers", "all", "--fit", "off")
+GPU_OFFLOAD_PATTERN = re.compile(r"offloaded\s+(\d+)/(\d+)\s+layers to GPU", re.IGNORECASE)
 
 PREFERRED_DURATION_US = {
     ProposalCategory.REACTION: (15_000_000, 60_000_000),
@@ -185,10 +189,7 @@ class ManagedLlamaServer:
             "1",
             "--n-predict",
             str(self.profile.output_tokens),
-            "--n-gpu-layers",
-            "auto",
-            "--fit",
-            "on",
+            *FULL_GPU_OFFLOAD_ARGUMENTS,
             "--flash-attn",
             "on",
             "--cache-type-k",
@@ -263,12 +264,21 @@ class ManagedLlamaServer:
                     "llama-server did not expose the requested effective context "
                     f"({effective_context!r} < {self.profile.context_size})"
                 )
+            log_text = Path(self.stderr.name).read_text(encoding="utf-8", errors="replace")
+            expected_models = 2 if self.profile.mtp and model_profile.mtp == "separate" else 1
+            self._require_full_gpu_offload(log_text, expected_models=expected_models)
             self.properties = props
             self.startup_seconds = time.monotonic() - started
             self.vram_loaded_mib = used_vram_mib()
         except BaseException:
             self.close()
             raise
+
+    @staticmethod
+    def _require_full_gpu_offload(log_text: str, *, expected_models: int) -> None:
+        reports = tuple((int(offloaded), int(total)) for offloaded, total in GPU_OFFLOAD_PATTERN.findall(log_text))
+        if len(reports) < expected_models or any(offloaded != total for offloaded, total in reports):
+            raise WorkerError("llama-server did not confirm full GPU layer offload")
 
     @staticmethod
     def _effective_context(properties: dict[str, object]) -> int | None:

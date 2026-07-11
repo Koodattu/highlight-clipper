@@ -6,7 +6,13 @@ from dataclasses import dataclass
 from .adapters.fake import FakeAsrAdapter, FakeEvaluatorAdapter
 from .adapters.faster_whisper import FASTER_WHISPER_VAD_PARAMETERS, FasterWhisperAdapter
 from .adapters.llama_cpp import LlamaCppEvaluatorAdapter, LlamaEvaluatorProfile
-from .adapters.qwen_embedding import QwenEmbeddingAdapter
+from .adapters.qwen_embedding import (
+    EMBEDDING_ADAPTER_VERSION,
+    EMBEDDING_ATTENTION,
+    EMBEDDING_COMPUTE_DTYPE,
+    EMBEDDING_DEVICE,
+    QwenEmbeddingAdapter,
+)
 from .database import Database
 from .domain import fingerprint
 from .model_profiles import get_model_profile, load_catalog
@@ -110,10 +116,12 @@ def build_analysis_workflow(
     )
     embedding_execution_identity = fingerprint(
         {
-            "adapter": "sentence-transformers-worker-v1",
+            "adapter": EMBEDDING_ADAPTER_VERSION,
             "asset": embedding_asset.identity_fingerprint,
             "batch_size": 16,
-            "device": "cpu",
+            "device": EMBEDDING_DEVICE,
+            "compute_dtype": EMBEDDING_COMPUTE_DTYPE,
+            "attention_implementation": EMBEDDING_ATTENTION,
             "query_instruction_version": 1,
         }
     )

@@ -1178,6 +1178,7 @@ class AnalysisWorkflow:
             {
                 "analysis_run_id": run_id,
                 "embedding_profile": self.configuration.embedding_profile,
+                "embedding_execution_identity": self.configuration.embedding_execution_identity,
                 "documents": [(item.key, fingerprint(item.text)) for item in documents],
                 "queries": [(item.key, fingerprint(item.text)) for item in queries],
             }
@@ -1201,6 +1202,7 @@ class AnalysisWorkflow:
         manifest_digest = sha256_file(result.manifest_path)
         configuration = {
             "embedding_profile": self.configuration.embedding_profile,
+            "embedding_execution_identity": self.configuration.embedding_execution_identity,
             "retrieval_version": self.configuration.retrieval_version,
         }
         configuration_fingerprint = fingerprint(configuration)
@@ -1223,6 +1225,11 @@ class AnalysisWorkflow:
                     "sha256": vector_digest,
                     "dimension": result.dimension,
                     "dtype": result.dtype,
+                    "effective_device": result.metadata.get("effective_device"),
+                    "compute_dtype": result.metadata.get("compute_dtype"),
+                    "worker_elapsed_seconds": result.metadata.get("elapsed_seconds"),
+                    "vram_before_mib": result.metadata.get("vram_before_mib"),
+                    "vram_after_mib": result.metadata.get("vram_after_mib"),
                 },
             )
             manifest_artifact_id = artifacts.register(

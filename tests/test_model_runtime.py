@@ -6,7 +6,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from highlight_clipper.adapters.llama_cpp import LlamaCppEvaluatorAdapter, LlamaEvaluatorProfile
+from highlight_clipper.adapters.llama_cpp import (
+    FULL_GPU_OFFLOAD_ARGUMENTS,
+    LlamaCppEvaluatorAdapter,
+    LlamaEvaluatorProfile,
+    ManagedLlamaServer,
+)
 from highlight_clipper.composition import selection_from_configuration
 from highlight_clipper.model_profiles import get_model_profile, load_catalog
 from highlight_clipper.ports import CandidateEvaluationOutcome, EvaluatorExecutionError
@@ -243,6 +248,20 @@ class LlamaAdapterTests(unittest.TestCase):
 
 
 class ModelCatalogTests(unittest.TestCase):
+    def test_llama_runtime_requires_and_verifies_full_gpu_offload(self) -> None:
+        self.assertEqual(FULL_GPU_OFFLOAD_ARGUMENTS, ("--n-gpu-layers", "all", "--fit", "off"))
+        ManagedLlamaServer._require_full_gpu_offload(
+            "offloaded 47/47 layers to GPU\noffloaded 12/12 layers to GPU",
+            expected_models=2,
+        )
+        with self.assertRaisesRegex(RuntimeError, "full GPU"):
+            ManagedLlamaServer._require_full_gpu_offload(
+                "offloaded 40/47 layers to GPU",
+                expected_models=1,
+            )
+        with self.assertRaisesRegex(RuntimeError, "full GPU"):
+            ManagedLlamaServer._require_full_gpu_offload("", expected_models=1)
+
     def test_asr_language_round_trips_through_persisted_run_configuration(self) -> None:
         self.assertEqual(selection_from_configuration({"asr_language": "fi"}).asr_language, "fi")
         self.assertIsNone(selection_from_configuration({}).asr_language)
