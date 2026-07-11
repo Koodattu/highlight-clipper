@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "llama_cpp": {
+    "tag": "b9956",
+    "archives": [
+      {
+        "name": "llama-b9956-bin-win-cuda-12.4-x64.zip",
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9956/llama-b9956-bin-win-cuda-12.4-x64.zip",
+        "sha256": "ec4bb65d0be917bea46c6719653f73ee339ddab0e4cb6da25009d1b871397e94"
+      },
+      {
+        "name": "cudart-llama-bin-win-cuda-12.4-x64.zip",
+        "url": "https://github.com/ggml-org/llama.cpp/releases/download/b9956/cudart-llama-bin-win-cuda-12.4-x64.zip",
+        "sha256": "8c79a9b226de4b3cacfd1f83d24f962d0773be79f1e7b75c6af4ded7e32ae1d6"
+      }
+    ]
+  },
+  "profiles": {
+    "whisper-turbo": {
+      "kind": "asr_snapshot",
+      "repository": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
+      "revision": "0a363e9161cbc7ed1431c9597a8ceaf0c4f78fcf",
+      "destination": "models/asr/whisper-turbo",
+      "estimated_download_bytes": 1700000000
+    },
+    "whisper-large-v3": {
+      "kind": "asr_snapshot",
+      "repository": "Systran/faster-whisper-large-v3",
+      "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+      "destination": "models/asr/whisper-large-v3",
+      "estimated_download_bytes": 3200000000
+    },
+    "qwen3-embedding-0.6b": {
+      "kind": "embedding_snapshot",
+      "repository": "Qwen/Qwen3-Embedding-0.6B",
+      "revision": "97b0c614be4d77ee51c0cef4e5f07c00f9eb65b3",
+      "destination": "models/embeddings/qwen3-0.6b",
+      "estimated_download_bytes": 1300000000
+    },
+    "bge-m3": {
+      "kind": "embedding_snapshot",
+      "repository": "BAAI/bge-m3",
+      "revision": "5617a9f61b028005a4858fdac845db406aefb181",
+      "destination": "models/embeddings/bge-m3",
+      "estimated_download_bytes": 2400000000
+    },
+    "parakeet-v3": {
+      "kind": "diagnostic_snapshot",
+      "repository": "nvidia/parakeet-tdt-0.6b-v3",
+      "revision": "7c35754d166cca382ad1e53e68b01e7c575f3a1d",
+      "destination": "models/asr/parakeet-v3",
+      "estimated_download_bytes": 2600000000
+    },
+    "qwen36-35b-a3b": {
+      "kind": "llm_files",
+      "repository": "unsloth/Qwen3.6-35B-A3B-MTP-GGUF",
+      "revision": "5bc3e238d916f48a861bac2f8a1990a0e9b7e98d",
+      "files": ["Qwen3.6-35B-A3B-UD-IQ4_NL.gguf"],
+      "destination": "models/llm/qwen36-35b-a3b",
+      "architecture": "qwen",
+      "mtp": "embedded",
+      "estimated_download_bytes": 18500000000,
+      "execution": {
+        "context_size": 32768,
+        "output_tokens": 2048,
+        "temperature": 0.7,
+        "top_p": 0.8,
+        "top_k": 20,
+        "min_p": 0.0,
+        "presence_penalty": 1.5,
+        "repeat_penalty": 1.0,
+        "chat_template_kwargs": {"enable_thinking": false}
+      }
+    },
+    "qwen36-27b": {
+      "kind": "llm_files",
+      "repository": "unsloth/Qwen3.6-27B-MTP-GGUF",
+      "revision": "5cb35eb3dcbf52dbce5f87dbc64df6aaffadcace",
+      "files": ["Qwen3.6-27B-UD-Q4_K_XL.gguf"],
+      "destination": "models/llm/qwen36-27b",
+      "architecture": "qwen",
+      "mtp": "embedded",
+      "estimated_download_bytes": 17900000000,
+      "execution": {
+        "context_size": 32768,
+        "output_tokens": 2048,
+        "temperature": 0.7,
+        "top_p": 0.8,
+        "top_k": 20,
+        "min_p": 0.0,
+        "presence_penalty": 1.5,
+        "repeat_penalty": 1.0,
+        "chat_template_kwargs": {"enable_thinking": false}
+      }
+    },
+    "gemma4-31b": {
+      "kind": "llm_files",
+      "repository": "unsloth/gemma-4-31B-it-qat-GGUF",
+      "revision": "1f1e54258d4a2cf7522856a5789045d9f2ea6d16",
+      "files": ["gemma-4-31B-it-qat-UD-Q4_K_XL.gguf", "mtp-gemma-4-31B-it.gguf"],
+      "destination": "models/llm/gemma4-31b",
+      "architecture": "gemma",
+      "mtp": "separate",
+      "estimated_download_bytes": 17600000000,
+      "execution": {
+        "context_size": 32768,
+        "output_tokens": 2048,
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 64,
+        "min_p": 0.0,
+        "presence_penalty": 0.0,
+        "repeat_penalty": 1.0,
+        "chat_template_kwargs": {}
+      }
+    },
+    "gemma4-26b-a4b": {
+      "kind": "llm_files",
+      "repository": "unsloth/gemma-4-26B-A4B-it-qat-GGUF",
+      "revision": "c1f25db7cf31985b52caa1db777eb72d17ca1c7c",
+      "files": ["gemma-4-26B-A4B-it-qat-UD-Q4_K_XL.gguf", "mtp-gemma-4-26B-A4B-it.gguf"],
+      "destination": "models/llm/gemma4-26b-a4b",
+      "architecture": "gemma",
+      "mtp": "separate",
+      "estimated_download_bytes": 14500000000,
+      "execution": {
+        "context_size": 32768,
+        "output_tokens": 2048,
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 64,
+        "min_p": 0.0,
+        "presence_penalty": 0.0,
+        "repeat_penalty": 1.0,
+        "chat_template_kwargs": {}
+      }
+    }
+  }
+}

@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="highlight-clipper-token" content="__SESSION_TOKEN__">
+    <title>Highlight Clipper</title>
+    <link rel="stylesheet" href="/static/app.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Local editorial workspace</p>
+        <h1>Highlight Clipper</h1>
+      </div>
+      <div id="system-status" class="status-pill" aria-live="polite">Connecting</div>
+    </header>
+
+    <main class="shell">
+      <aside class="sidebar surface">
+        <nav class="tabs" aria-label="Workspace sections">
+          <button class="tab is-active" data-view="review">Review</button>
+          <button class="tab" data-view="sources">Sources</button>
+          <button class="tab" data-view="profile">Profile</button>
+          <button class="tab" data-view="references">References</button>
+        </nav>
+        <div id="sidebar-content"></div>
+      </aside>
+
+      <section class="workspace surface" aria-live="polite">
+        <div id="empty-state" class="empty-state">
+          <p class="eyebrow">No queue selected</p>
+          <h2>Import a recording, run analysis, then review the evidence.</h2>
+          <p>Large files enter through the CLI. This browser stays focused on editorial work.</p>
+          <code>uv run highlight-clipper import C:\path\to\recording.mp4</code>
+        </div>
+
+        <article id="reference-card" class="reference-card is-hidden">
+          <div>
+            <p class="eyebrow">Blind reference annotation</p>
+            <h2 id="reference-source-name">Choose a source recording</h2>
+            <p class="muted">System proposals stay hidden while you mark the moments you would want independently.</p>
+          </div>
+          <div id="reference-media" class="media-frame is-hidden">
+            <video id="reference-player" controls preload="metadata" aria-label="Source recording for blind reference annotation"></video>
+          </div>
+        </article>
+
+        <article id="review-card" class="review-card is-hidden">
+          <div class="review-heading">
+            <div>
+              <p id="proposal-meta" class="eyebrow"></p>
+              <h2 id="proposal-summary"></h2>
+            </div>
+            <div class="proposal-nav" aria-label="Proposal navigation">
+              <button id="previous-proposal" class="button ghost" type="button">← Previous</button>
+              <div id="proposal-count" class="counter"></div>
+              <button id="next-proposal" class="button ghost" type="button">Next →</button>
+            </div>
+          </div>
+
+          <div class="media-frame">
+            <video id="player" controls preload="metadata"></video>
+            <canvas id="waveform" height="72" aria-label="Source-aligned audio waveform"></canvas>
+          </div>
+
+          <div class="boundary-grid">
+            <label>Start <input id="boundary-start" type="number" min="0" step="0.000001"></label>
+            <label>End <input id="boundary-end" type="number" min="0" step="0.000001"></label>
+            <button id="play-context" class="button secondary">Play context</button>
+          </div>
+
+          <div class="proposal-grid">
+            <section>
+              <h3>Evidence</h3>
+              <div id="evidence-list" class="stack"></div>
+            </section>
+            <section>
+              <h3>Judgments</h3>
+              <div id="judgment-list" class="score-grid"></div>
+            </section>
+            <section>
+              <h3>Clip structure</h3>
+              <div id="structure-list" class="score-grid"></div>
+            </section>
+            <section>
+              <h3>Reasons against selection</h3>
+              <div id="reason-list" class="stack"></div>
+            </section>
+          </div>
+
+          <div id="risk-panel" class="risk-panel is-hidden"></div>
+          <div id="decision-state" class="decision-state"></div>
+
+          <div class="review-actions">
+            <button id="accept" class="button accept"><kbd>A</kbd> Accept</button>
+            <button id="maybe" class="button secondary"><kbd>M</kbd> Maybe</button>
+            <button id="reject" class="button reject"><kbd>R</kbd> Reject</button>
+            <button id="undo" class="button ghost"><kbd>U</kbd> Undo</button>
+            <button id="reanalyze-boundary" class="button secondary is-hidden">Reanalyze edited interval</button>
+            <button id="export" class="button primary">Export accepted clip</button>
+          </div>
+        </article>
+      </section>
+    </main>
+
+    <dialog id="reject-dialog">
+      <form method="dialog" class="dialog-card">
+        <div>
+          <p class="eyebrow">Editorial decision</p>
+          <h2>Why reject this proposal?</h2>
+        </div>
+        <label>Reason
+          <select id="reject-reason" required>
+            <option value="no_payoff">No payoff</option>
+            <option value="too_much_context">Too much required context</option>
+            <option value="routine_content">Routine content</option>
+            <option value="repetition">Repetition</option>
+            <option value="poor_media_quality">Poor media quality</option>
+            <option value="poor_creator_fit">Poor creator fit</option>
+            <option value="publication_risk">Publication risk</option>
+            <option value="unusable_boundaries">Unusable boundaries</option>
+          </select>
+        </label>
+        <label>Optional note <textarea id="reject-note" rows="3"></textarea></label>
+        <div class="dialog-actions">
+          <button value="cancel" class="button ghost">Cancel</button>
+          <button id="confirm-reject" value="default" class="button reject">Reject proposal</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>

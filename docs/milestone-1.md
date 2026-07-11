@@ -1,6 +1,8 @@
 # Milestone 1: Trustworthy local review queue
 
-**Status:** Proposed pending final shared-understanding confirmation
+**Status:** Normative design and acceptance specification. A working vertical slice exists; empirical promotion is pending.
+
+See [Implementation status](./implementation-status.md) for current code and verification evidence. Requirements on this page remain gates until that status page records representative proof.
 
 Milestone 1 is a local, single-creator application that turns one long local recording into a short queue of evidence-backed Clip Proposals. The creator reviews, corrects boundaries, and labels those proposals, then explicitly confirms source-aspect exports rendered from the original Source Recording.
 
@@ -9,6 +11,8 @@ The milestone establishes a complete text/audio-first editorial loop and the dur
 Milestone 1 measures retrieval quality, boundary quality, runtime feasibility, and editorial usefulness on a pilot corpus. It does not claim broad generalization from a few recordings.
 
 ## Success criteria
+
+These are release gates, not a claim that the current short integration fixture has passed them. The local pipeline, recovery contracts, and evaluator schema have been exercised; pilot recall, boundary, representative throughput, review-budget, four-model, and sealed-holdout results still require creator recordings.
 
 - One regular local video file completes the workflow from atomic import through human-confirmed source-aspect export.
 - Interrupted or cancelled analysis resumes from valid completed work without duplicating artifacts or losing creator-owned history.
@@ -110,7 +114,7 @@ Milestone 1 has at most one active Source Import or Analysis Run stage at a time
 
 Stages are resumable and idempotent through immutable generations and versioned input/configuration fingerprints. Invalidation follows the stage graph: a changed ASR configuration does not recreate media; a ranking change creates a new Queue Snapshot; an export-profile change creates only a new Export. A new Analysis Run may reuse compatible generations and never mutates a Queue Snapshot already under review.
 
-SQLite is the only metadata writer. Workers report structured progress and results; they do not write application tables directly. Startup reconciles interrupted attempts, owned process trees, the GPU lease, partial files, and filesystem/database disagreement before accepting new work.
+SQLite is the only metadata writer. Workers return structured results and a live PID; controller-side stage progress is persisted while workers do not write application tables directly. The worker request/result protocol is not a streaming telemetry channel. Startup reconciles interrupted attempts, owned process trees, the GPU lease, partial files, and filesystem/database disagreement before accepting new work.
 
 See [ADR 0007](./adr/0007-preserve-editorial-history-across-reanalysis.md) and [ADR 0009](./adr/0009-end-analysis-at-the-queue-snapshot.md).
 
@@ -155,7 +159,7 @@ Transcript and audio discovery remain independent so conspicuous audio cannot bu
 ### Audio discovery
 
 - Measure energy and peak changes.
-- Use Silero speech activity, pauses, and transcript-derived speech rate.
+- Use explicit Silero VAD inside Faster Whisper (500 ms minimum silence and 200 ms speech padding). Separately derive 5-second speech activity, rate, and pause-change evidence from timestamped transcript words and segment gaps; do not label the latter as persisted VAD output.
 - Normalize observations against rolling local median and median absolute deviation rather than fixed global thresholds.
 - Preserve raw measurements as Observations rather than claiming to infer emotion.
 
@@ -175,9 +179,9 @@ Candidate Moment retrieval and clip-boundary selection are separate stages. Each
 
 The local evaluator runs through a pinned llama.cpp Windows/CUDA Runtime Bundle. The first useful real pipeline uses one baseline profile with MTP disabled. Only after a fixed annotated set exists are Qwen3.6-35B-A3B, Qwen3.6-27B, Gemma 4 31B, and Gemma 4 26B-A4B screened under a common profile; reasoning, context, quantization, and MTP tuning is limited to the best one or two deployable profiles.
 
-The integration profile starts with a 32K context cap and records the actual prompt-size distribution; a smaller cap is promoted when it fits every representative envelope and output reserve. Larger tiers are diagnostic until they separately meet quality, latency, and VRAM gates. Input is never silently truncated: oversized input is re-enveloped or recorded as input-too-large.
+The integration profile starts with a 32K context cap and records the actual prompt-size distribution; a smaller cap is promoted when it fits every representative envelope and output reserve. Larger tiers are diagnostic until they separately meet quality, latency, and VRAM gates. Input is never silently truncated: the current adapter records oversized input as `input_too_large`; automatic re-enveloping is a future recovery policy.
 
-Every request uses a Pydantic-derived JSON schema, stable Evidence Item and Boundary Anchor IDs, and structurally delimited untrusted transcript/profile content. Runtime build, model revision and hashes, tokenizer/template, prompt/schema version, rendered input, sampling, reasoning/output budgets, context use, and effective offload are persisted.
+Every request uses a Pydantic-derived JSON schema, stable Evidence Item and Boundary Anchor IDs, and escaped, structurally delimited untrusted transcript/profile content. Runtime/model manifest identities, prompt/schema version, prompt hash, sampling profile, reasoning/output budgets, prompt counts, effective context, worker PID, server-start/evaluation duration, and observed VRAM before/loaded/delta are persisted. Effective GPU-layer offload and prompt/decode timing split remain promotion measurements rather than current stored fields.
 
 Every retained Clip Proposal contains:
 
@@ -218,17 +222,18 @@ The review screen provides:
 - a Source Time-aligned waveform with the proposal and editable boundaries;
 - transcript and stable timestamped evidence;
 - category, proposal structure, judgments, and Risk flags;
+- explicit Previous/Next navigation that never creates a decision revision;
 - keyboard-driven accept, maybe, reject, and undo actions;
 - a structured Rejection Reason and optional note;
 - boundary controls that preserve frame-level Source Time even outside the evaluated Context Envelope;
-- a stale-evidence warning and optional new Analysis Run that reuses artifacts and creates a successor Proposal/Queue Snapshot linked by supersedes;
+- a stale-evidence warning and optional new Analysis Run for edited intervals up to 240 seconds that reuses artifacts and creates a successor Proposal/Queue Snapshot linked by supersedes;
 - automatic progression to the next proposal.
 
 Decisions are append-only and idempotent. A Boundary Edit may accompany accept, maybe, or reject; unusable proposed boundaries remain a valid Rejection Reason when the editor does not want to repair them. Every export requires human confirmation; a Risk flag or interval outside evaluated context adds a stronger warning. Unflagged never means safety-scanned.
 
 A maybe decision is unresolved: it remains available in a separate review filter, is not exportable, and is not silently treated as either a positive or negative training label. Undo appends withdrawn. A new Export is allowed only when the latest overall decision revision itself is accept; historical Exports remain immutable after later changes.
 
-All transcript, profile, evidence, and evaluator content is rendered as untrusted text. Logs are bounded and omit complete transcripts by default.
+All transcript, profile, evidence, and evaluator content is rendered as untrusted text. Private evaluator responses and worker payloads stay below the Work Directory and are cleaned according to their lifecycle. llama.cpp logs are local, but rotation/retention and stronger transcript redaction remain hardening work.
 
 Filesystem-sized operations use the small documented CLI: setup, import by absolute local path, serve, and verified backup. The web application edits the Creator Profile, starts and monitors analysis, annotates Reference Moments, reviews proposals, and confirms exports; it never browser-uploads a multi-hour recording.
 
@@ -238,10 +243,10 @@ Filesystem-sized operations use the small documented CLI: setup, import by absol
 - SQLite enables foreign-key enforcement, WAL mode, a bounded busy timeout, transactional schema migrations, startup integrity checks, and backup before any migration that can discard information.
 - Large embeddings are versioned checked artifact arrays referenced by SQLite; a vector database is unnecessary for one recording.
 - Every runtime/model, Source Recording, database, proxy, audio file, transcript, observation artifact, preview, export, cache, log, and partial file remains beneath the repository-local Git-ignored `workdir/`.
-- Model outputs are cached by exact evidence/input fingerprint, Model Profile, prompt/schema version, and relevant parameters.
+- Completed ASR checkpoints are keyed by exact audio/model/execution fingerprint. Explicit Request More and boundary-reanalysis lineage reuses compatible ASR and embedding stages; general cross-run evaluator/model-output caching is not implemented.
 - The single anchored `/workdir/` ignore rule is the Git boundary; broad extension ignores do not hide intentional test fixtures elsewhere.
 - A backup command uses SQLite's backup API and exports a versioned portable label package with source/time manifest, Creator Profile and Reference Moment revisions, Analysis Run/model identity, proposals/evidence, Queue Snapshot ranks, Editorial Decisions, Boundary Edits, and artifact hashes.
-- Backups default to a consistent local snapshot under the Work Directory and may be copied and verified to a user-selected external destination.
+- Backups default to a consistent local snapshot under the Work Directory and may be copied and verified to a user-selected external destination. Restore verifies its source, refuses a recorded active operation, preserves the current database (or best-effort raw corrupt files), atomically installs the snapshot, migrates it, and runs integrity checks. Metadata backup does not duplicate media bytes.
 - App-specific cleanup never uses Git, distinguishes valuable creator data from disposable cache/incomplete attempts, and may garbage-collect unreferenced regenerable bytes while preserving lineage and editorial history.
 
 ## Evaluation
@@ -277,6 +282,8 @@ With ten sealed references and the 80% recall gate, as few as eight pairs may be
 
 ### Metrics and ablations
 
+The `evaluate <analysis-run-id>` command now produces a deterministic, hashed single-run report from frozen Reference Moments. It implements one-to-one Event matching, recall@10/20/30, boundary error/tIoU, category/language slices, decisions, and recorded active-review metrics. Cross-recording macro aggregation, experiment grouping, and the ablation/bake-off runner remain part of slice 6 rather than being inferred from one report.
+
 Primary metrics:
 
 - macro definite Reference Moment recall at 10, 20, and 30 proposals;
@@ -309,14 +316,14 @@ A more expensive component is promoted only when held-out end-to-end benefit jus
 
 ## Implementation slices
 
-0. Define the minimal domain types, integer Source Time conversion, SQLite migrations/lineage, adapter seams, and deterministic media/model fixtures.
-1. Complete a thin fake happy-path workflow plus cancellation and checkpoint resume: Creator Profile, Queue Snapshot, review decisions, Boundary Edits, and deterministic export.
-2. Integrate atomic Source Import, explicit stream selection, FFprobe/FFmpeg timeline scan, proxy/audio creation, playback, Source Time alignment fixtures, and source-aspect export.
-3. Integrate chunked faster-whisper Turbo, lightweight audio Observations, lexical retrieval, one embedding path, candidate budgets, merge, and Context Envelopes.
-4. Integrate the managed no-MTP Qwen baseline, strict evidence/anchor/schema validation, ordering/diversity, and run the first useful real recording through review and export.
-5. Harden the proven path with malformed-output, crash/hang, disk-full, orphan reconciliation, GPU-owner failure, backup/restore, and local-web security checks.
-6. Annotate the pilot corpus, freeze runtime/product budgets, run ASR and evaluator screening, promote one configuration, and evaluate the sealed recording.
-7. Tune bounded reasoning, larger context only if measured prompts require it, and MTP only for the best one or two profiles; retain only measured improvements.
+0. **Implemented:** minimal domain types, integer Source Time conversion, SQLite migrations/lineage, adapter seams, and deterministic media/model fixtures.
+1. **Implemented:** fake happy path, cancellation/checkpoint retry, Creator Profile, Queue Snapshot, review decisions, real-only Boundary Edits, and deterministic export.
+2. **Implemented and fixture-verified:** atomic import, stream selection, FFprobe/FFmpeg timeline scan, proxy/audio/waveform creation, playback, alignment fixtures, and source-aspect export with source metadata stripped.
+3. **Implemented baseline:** chunked faster-whisper Turbo, rolling/block-local energy/change observations, lexical retrieval, CPU Qwen embeddings, fair candidate budgets, section-balanced envelopes, and complete provenance. Held-out ablation remains pending.
+4. **Implemented and real-smoked:** managed no-MTP Qwen baseline, strict evidence/anchor/schema validation, profile-aware ordering/diversity, review, and export.
+5. **Partially implemented:** malformed-output, worker cancellation/hang, artifact integrity, orphan reconciliation, process ownership, backup verification/restore (including corrupt-current recovery), local-web security, and private worker-payload cleanup have coverage. Disk-full, crash-at-every-commit-boundary, aggregate capacity planning, media retention, and long soak remain.
+6. **Tooling started; evidence pending:** frozen Reference Moments, language slices, deterministic single-run matching/metrics, and review-time capture exist. The representative pilot corpus, cross-run aggregation, ASR/evaluator screening, budgets, promotion, and sealed recording do not.
+7. **Pending empirical finalists:** explicit context caps from 8,192 through 262,144 tokens and MTP launch paths are implemented diagnostic modes but remain unpromoted; bounded thinking is not a selectable mode.
 
 ## Decisions intentionally left empirical
 
@@ -332,9 +339,8 @@ The architecture defines how these decisions are compared and promoted; it does 
 
 ## Known environment risks
 
-- Installed FFmpeg/FFprobe is version 4.2.1. Startup must verify the required decoders, encoders, filters, timestamp behavior, and browser-compatible output; upgrade only if the capability check fails.
-- `python` is version 3.11.9, but the Windows `py` launcher resolves to Python 2.7. Project commands use `uv run` or the explicit environment interpreter.
-- faster-whisper GPU execution needs a verified CUDA 12 and cuDNN 9 combination.
-- llama.cpp is not installed in the Work Directory and none of the evaluator profiles has been downloaded or benchmarked. The baseline Runtime Bundle needs only the no-MTP Qwen path; a later experiment bundle must add and smoke-test both Qwen3.6 and Gemma 4 MTP support.
-- No representative Source Recordings or Reference Moments exist in the repository, so retrieval, boundary, latency, and editorial-productivity gates cannot yet be measured.
-- Valuable ignored data under the Work Directory is outside Git protection and requires the documented backup and app-specific cleanup path.
+- Inspect `workdir/state/runtime-manifest.json` for the actual FFmpeg, GPU/driver, CUDA, memory, pagefile, and installed-asset state; machine-version facts are not frozen in this design document.
+- The real worker path requires the repository-local Python 3.11/3.12 environment plus compatible NVIDIA/CUDA/cuDNN runtime DLLs. Ordinary tests remain offline/CPU-only.
+- Pinned llama.cpp `b9956`, Whisper Turbo, Qwen embeddings, and Qwen3.6-35B-A3B are installed and have completed a real short baseline run on the target machine. Qwen MTP has only a strict-JSON smoke; Qwen 27B and both Gemma workloads remain unscreened.
+- No representative creator pilot corpus exists in the repository, so quality, boundary, representative latency, and productivity gates are not yet promotable results.
+- Valuable ignored data under the Work Directory is outside Git protection and requires verified backups. Database restore is implemented; media retention/garbage collection remains incomplete, and metadata backup alone cannot replace missing recordings.

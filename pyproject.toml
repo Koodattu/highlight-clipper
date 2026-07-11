@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "highlight-clipper"
+version = "0.1.0"
+description = "Local evidence-backed highlight retrieval, review, and export"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+license = { file = "LICENSE" }
+dependencies = [
+  "fastapi>=0.115,<1",
+  "pydantic>=2.10,<3",
+  "uvicorn>=0.34,<1",
+]
+
+[project.optional-dependencies]
+asr = ["faster-whisper>=1.1,<2"]
+embeddings = ["sentence-transformers>=5,<6"]
+models = ["huggingface-hub>=0.34,<2"]
+dev = [
+  "httpx>=0.28,<1",
+  "pytest>=8.3,<10",
+  "pytest-cov>=6,<8",
+  "ruff>=0.11,<1",
+]
+
+[project.scripts]
+highlight-clipper = "highlight_clipper.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/highlight_clipper"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-config --strict-markers"
+testpaths = ["tests"]
+markers = [
+  "gpu: requires the target CUDA GPU",
+  "long_media: processes representative long recordings",
+  "real_model: requires downloaded model weights",
+  "slow: intentionally slow integration check",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]

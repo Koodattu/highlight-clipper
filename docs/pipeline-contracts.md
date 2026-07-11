@@ -1,6 +1,8 @@
 # Pipeline contracts
 
-**Status:** Proposed pending final shared-understanding confirmation
+**Status:** Normative contract. Core invariants are implemented; remaining hardening is tracked separately.
+
+See [Implementation status](./implementation-status.md) for the evidence-backed implementation matrix. Text below describes the intended contract unless an implementation note narrows current behavior.
 
 These contracts make the Milestone 1 workflow reproducible, recoverable, and safe for creator-owned recordings and editorial decisions. They define behavior that every real or fake adapter must preserve; they do not require a distributed system or a general workflow engine.
 
@@ -35,7 +37,7 @@ The persisted model distinguishes these identities:
 | Evaluation Attempt | One evaluator/profile execution against one Context Envelope |
 | Clip Proposal | Immutable evaluator result linked to its envelope, evidence, and evaluator attempt |
 | Queue Snapshot | Immutable ranked proposal list and ordering configuration presented for review |
-| Reference Moment revision | Immutable evaluation annotation with source identity, certainty, interval, Event anchor, and rationale |
+| Reference Moment revision | Immutable evaluation annotation with source identity, certainty, category/language slice, interval, Event anchor, suitability, and rationale |
 | Editorial Decision revision | Append-only accept, maybe, reject, or withdrawn judgment for a proposal |
 | Boundary Edit | Optional editor-corrected interval associated with a specific decision revision |
 | Export | Validated rendered artifact linked to the exact decision revision and export configuration |
@@ -80,9 +82,9 @@ Cancellation is a control request recorded separately from attempt state. A runn
 
 Every attempt records its input fingerprint, configuration fingerprint, attempt number, prior attempt/checkpoint when applicable, owner instance, worker process identity, start and end times, progress, committed outputs, retryability, and a bounded actionable error summary.
 
-The orchestrator is in-process and is the only SQLite writer. CUDA and other failure-prone model runtimes execute in owned child process trees. Workers communicate through a versioned protocol with ready, progress, checkpoint, result, drained, and error events. Cancellation has a deadline; a worker that does not drain is terminated with its process tree.
+The orchestrator is in-process and is the only SQLite writer. CUDA and other failure-prone model runtimes execute in owned child process trees. The implemented worker protocol uses versioned request/result JSON files plus exit status, bounded controller polling, ASR checkpoints, stdout/stderr diagnostics, and process-tree termination. Streaming ready/progress/drained events remain a future refinement rather than a current claim.
 
-At startup, the orchestrator reconciles:
+At startup, the current orchestrator reconciles stale import/analysis leases, running Stage/Evaluation Attempts, interrupted exports, registered missing valuable artifacts, persisted unregistered source-tree recovery items, and the recovery quarantine. The fuller contract also calls for:
 
 - attempts left in running;
 - process identities, using creation identity as well as PID to avoid PID reuse;
@@ -90,6 +92,8 @@ At startup, the orchestrator reconciles:
 - registered artifacts whose files are missing or fail validation;
 - unregistered completed files;
 - a persisted GPU lease whose owner no longer exists.
+
+The GPU mutex is currently OS-owned rather than persisted, and recovery does not yet discover every possible unregistered embedding/evaluator/export partial. Those remain explicit hardening work.
 
 The first fake vertical slice exercises success, cancellation, and checkpoint resume. Before Milestone 1 completion, deterministic fault fixtures also cover malformed output, worker crash or hang, disk-full behavior, and an owned GPU process that fails to exit. This hardening follows the first real end-to-end recording rather than blocking it.
 
@@ -107,7 +111,7 @@ An artifact attempt writes only to an attempt-owned partial path beside its fina
 
 There is no atomic transaction spanning NTFS and SQLite. Startup reconciliation is therefore part of the commit protocol, not optional cleanup. It may remove only files owned by incomplete attempts and unreferenced generations; it never removes a previous valid generation or user-owned source, decision, or export.
 
-SHA-256 is mandatory for imported sources, downloaded runtimes/models, exports, backups, and portable label packages. A large regenerable proxy, PCM file, or vector array may use its complete configuration/content identity, size, and format validation without a second full-file hash pass. The integrity policy is versioned by artifact kind.
+SHA-256 is mandatory for imported sources, installed asset files, analysis audio, embedding artifacts, evaluator raw output, exports, backups, and portable label packages. llama.cpp archives have catalog-supplied expected hashes. Hugging Face assets use exact committed revisions and post-download per-file hashes in a local manifest, which is reverified before use; this is not an upstream expected-hash claim.
 
 SQLite runs with foreign-key enforcement, WAL mode, a bounded busy timeout, transactional numbered migrations, and startup integrity checks. A migration that can discard information requires a verified backup first.
 
@@ -131,7 +135,7 @@ The application never moves, hard-links, edits, or deletes the caller's original
 
 Import rejects URLs, playlists, network protocols, directories, and paths that cannot be canonicalized. Subprocesses receive argument arrays, run without an interactive shell, and may write only beneath the Work Directory.
 
-Before import or a long stage, preflight checks Work Directory writability, database integrity and migration state, tool capabilities, pinned asset hashes, RAM/pagefile headroom, GPU prerequisites when relevant, and free disk. Disk estimation includes the imported source, proxy bitrate estimate, 16 kHz mono PCM at 32,000 bytes per source second, attempt-local temporary output, expected exports, selected models, caches, and a configurable safety reserve.
+Implemented setup verifies database/media prerequisites and installed asset hashes, and Source Import enforces a conservative free-disk estimate for the source, proxy, analysis audio, waveform, temporary output, and reserve. The runtime manifest records RAM/pagefile/GPU/storage diagnostics. A unified policy that rejects every long stage based on RAM/pagefile headroom, future export volume, all selected models, and aggregate cache growth remains a fuller contract rather than current enforcement.
 
 Probe persists:
 
@@ -171,7 +175,7 @@ The ASR adapter processes bounded chunks with overlap and cancellation checkpoin
 
 The adapter returns raw and normalized text, stable segment and word IDs, half-open Source Time intervals, confidence or no-speech values when available, and detected language at the finest supported granularity. Stitching is deterministic, removes overlap duplicates, validates monotonic timestamps, and cannot mark the transcript complete until every chunk has a valid result.
 
-Raw ASR output is retained for audit. Retrieval consumes a canonical transcript after versioned silence-hallucination filtering and normalization. It preserves Finnish/English code-switching rather than forcing one recording-level language.
+Raw ASR output is retained for audit. Retrieval consumes a canonical transcript after Unicode NFC, case-folding, and punctuation/whitespace normalization. It preserves Finnish/English code-switching rather than forcing one recording-level language. Silence/music hallucination is a promotion measurement; there is no dedicated production hallucination-filter stage yet.
 
 ASR promotion measures normalized WER and CER, word-timestamp error on a manually aligned subset, silence/music hallucination, full-hour throughput, peak VRAM, recovery, and downstream candidate/boundary quality. The versioned normalization uses Unicode NFC, case folding, punctuation/whitespace normalization, and preserves Finnish letters and code-switched terms. Per-language and code-switch floors are frozen before comparison so “best of the contenders” cannot promote an inadequate backend.
 
@@ -183,7 +187,7 @@ The first implementation includes a cheap lexical baseline alongside one multili
 
 Every Candidate Moment includes a point or short span in Source Time, generator and version, generator-local confidence, immutable evidence IDs, category hint, and idempotency key. Confidence values from different generators are not assumed to be calibrated or directly comparable.
 
-Each Context Envelope contains versioned Boundary Anchors derived from envelope edges, every contributing Candidate Moment anchor/span edge, timestamped Evidence Item peaks/edges, transcript word/sentence boundaries, and VAD pauses. The evaluator chooses proposal boundaries and structure points by anchor ID instead of inventing free numeric timestamps. This guarantees that an audio-only Reaction still has an Event anchor. Later scene/game adapters may add visual anchors through the same contract. A human Boundary Edit may use frame-level Source Time directly.
+Each Context Envelope contains versioned Boundary Anchors derived from envelope edges, every contributing Candidate Moment anchor/span edge, timestamped Evidence Item peaks/edges, transcript word/sentence boundaries, and pauses inferred from transcript-segment gaps. The evaluator chooses proposal boundaries and structure points by anchor ID instead of inventing free numeric timestamps. This guarantees that an audio-only Reaction still has an Event anchor. Later persisted VAD, scene, or game adapters may add anchors through the same contract. A human Boundary Edit may use frame-level Source Time directly.
 
 Initial workload guards are:
 
@@ -200,7 +204,7 @@ Coverage is measured on the union of Source Time intervals so overlap is not dou
 
 ## Semantic evaluation outcomes
 
-The exact rendered prompt uses stable evidence IDs and structurally delimits system instructions, Creator Profile, transcript content, and observations. Transcript and profile text are untrusted data and are never intentionally treated as instructions; schema, anchor, and evidence validation remains necessary because prompt formatting cannot guarantee model behavior.
+The exact rendered prompt uses stable evidence IDs, escapes delimiter characters inside untrusted JSON, and structurally delimits system instructions from Creator Profile, transcript content, and observations. Transcript and profile text are untrusted data and are never intentionally treated as instructions; schema, anchor, and evidence validation remains necessary because prompt formatting cannot guarantee model behavior.
 
 Each rubric judgment is an anchored integer from 0 through 4. The schema avoids decimal pseudo-probabilities, and the prompt defines what each level means for the selected judgment and category. Risk remains a set of typed flags, not a scalar quality score.
 
@@ -224,7 +228,7 @@ The exact raw response, request metadata, and validation errors are retained as 
 
 Machine Risk flags alone cannot produce semantic rejection or ranking ineligibility. They remain visible evidence for the human editor.
 
-Milestone 1 begins with a 32K integration cap, records the real prompt-size distribution, and may promote a smaller cap when every representative envelope and output reserve fits. Larger context profiles remain diagnostics until separately promoted. An oversized envelope is explicitly re-enveloped or marked input-too-large; input is never silently truncated and the server is not repeatedly relaunched per candidate.
+Milestone 1 begins with a 32K integration cap, records the real prompt-size distribution, and may promote a smaller cap when every representative envelope and output reserve fits. Larger context profiles remain diagnostics until separately promoted. The current adapter marks an oversized envelope `input_too_large`; a future policy may explicitly re-envelope it. Input is never silently truncated and the server is not repeatedly relaunched per candidate.
 
 ## Proposal duration and boundaries
 
@@ -246,7 +250,7 @@ Only valid proposals enter ranking. The fixed baseline formula, eligibility rule
 
 Machine Risk flags are not a negative quality score and never silently filter a proposal. Generator confidence and evaluator judgments remain separately inspectable.
 
-A Queue Snapshot never reorders or gains members while it is being reviewed. Requesting more proposals starts a new Analysis Run with an explicitly expanded retrieval/evaluation budget, reuses compatible generations, and creates a new Queue Snapshot. Existing proposal identities and decisions remain available for comparison.
+A Queue Snapshot never reorders or gains members while it is being reviewed. Requesting more proposals starts a new Analysis Run with an explicitly expanded retrieval/evaluation budget, reuses compatible ASR/embedding generations, evaluates only the candidate delta, pins the exact parent proposal/rank/score prefix, and creates a new Queue Snapshot. Existing proposal identities and decisions remain available for comparison. Evaluation discovery for that child uses the parent-plus-delta candidate union.
 
 ## Review and export
 
@@ -256,42 +260,46 @@ A maybe decision is unresolved rather than a weak positive: it is not exportable
 
 A rejection requires one structured Rejection Reason, including unusable proposed boundaries when the editor does not want to repair them. A Boundary Edit is optional for accept, maybe, or reject, so the system can learn both accepted corrections and boundary failures without biasing the selection label.
 
-Boundary controls may extend outside the evaluated Context Envelope. The requested interval is preserved immediately, marked outside-evaluated-context, and shown with stale evidence/Risk coverage. The editor may request evaluation of the larger interval through a new Analysis Run that reuses compatible artifacts and creates a successor Clip Proposal/Queue Snapshot linked by supersedes rather than revising the original. Exporting without that optional re-evaluation requires an additional stale-coverage confirmation.
+Boundary controls may extend outside the evaluated Context Envelope. The requested interval is preserved immediately, marked outside-evaluated-context, and shown with stale evidence/Risk coverage. For an edited interval no longer than the 240-second machine-proposal maximum, the editor may request evaluation through a new Analysis Run that reuses compatible artifacts and creates a successor Clip Proposal/Queue Snapshot linked by supersedes rather than revising the original. Longer human edits remain valid review data but cannot seed machine successor evaluation. Exporting without that optional re-evaluation requires an additional stale-coverage confirmation.
 
-An Export can start only when the latest overall Editorial Decision revision is accept; an older historical accept is not exportable after maybe, reject, or withdrawn. Every export requires an explicit human confirmation. Risk-flagged proposals receive an additional warning. Confirmation snapshots the exact current accept revision, accepted interval, source hash, FFmpeg build, and arguments. Existing Exports remain immutable history if a later decision changes.
+An Export can start only when the latest overall Editorial Decision revision is accept; an older historical accept is not exportable after maybe, reject, or withdrawn. The client supplies the exact decision revision it observed, and the server rejects a stale tab before reserving work. Unsaved visible boundary edits disable Export and reanalysis until a new decision revision records them. Every export requires explicit human confirmation; Risk-flagged and stale-evidence intervals receive additional warnings. Confirmation snapshots the exact current accept revision, accepted interval, source hash, FFmpeg build, and arguments. Existing Exports remain immutable history if a later decision changes.
 
 Exports use re-encoding for frame-accurate boundaries, write to an attempt-owned partial file, validate streams and playable duration, hash and atomically place the output, then register a new immutable Export. A changed decision creates a new export generation and never silently overwrites the old one.
 
-The default source-aspect Export is MP4 with H.264/libx264 at CRF 18 and preset medium, yuv420p, AAC at 48 kHz and 192 kbit/s, and fast-start metadata. It preserves source display aspect, normalizes declared rotation, and minimally pads odd dimensions when the codec requires even dimensions. The capability preflight must verify these encoders/options; the export profile is versioned and replaceable rather than silently falling back.
+The default source-aspect Export is MP4 with H.264/libx264 at CRF 18 and preset medium, yuv420p, AAC at 48 kHz and 192 kbit/s, and fast-start metadata. It strips source metadata and chapters, preserves source display aspect, normalizes declared rotation, and minimally pads odd dimensions when the codec requires even dimensions. The capability preflight must verify these encoders/options; the export profile is versioned and replaceable rather than silently falling back.
 
 ## Creator operating flow
 
 Milestone 1 uses a small CLI for filesystem-sized operations and the local web application for interactive work:
 
 ~~~text
-uv run highlight-clipper setup
-uv run highlight-clipper import <absolute-local-media-path> [--video-stream <id> --audio-stream <id>]
-uv run highlight-clipper serve
-uv run highlight-clipper backup [--destination <path>]
+.\.venv\Scripts\highlight-clipper.exe setup --baseline
+.\.venv\Scripts\highlight-clipper.exe import <absolute-local-media-path> [--video-stream <id> --audio-stream <id>]
+.\.venv\Scripts\highlight-clipper.exe analyze <source-recording-id>
+.\.venv\Scripts\highlight-clipper.exe analyze <source-recording-id> --request-more-from <analysis-run-id>
+.\.venv\Scripts\highlight-clipper.exe serve
+.\.venv\Scripts\highlight-clipper.exe evaluate <succeeded-analysis-run-id>
+.\.venv\Scripts\highlight-clipper.exe backup [--destination <path>]
+.\.venv\Scripts\highlight-clipper.exe backup --restore <backup-directory>
 ~~~
 
 Import copies directly from the supplied path into the Work Directory; a browser upload is not used for multi-hour media. In the web application the creator edits/version-controls the Creator Profile, selects an imported Source Recording, starts/resumes/cancels/retries analysis, sees stage progress and actionable failures, annotates Reference Moments, reviews Queue Snapshots, and confirms exports.
 
-Reference annotation mode provides playback, category and certainty, ideal start/end, required Event anchor, and rationale without exposing system proposals until the annotation revision is frozen for evaluation.
+Reference annotation mode provides source playback, category/certainty/language slice, ideal start/end, required Event anchor, and rationale while hiding proposal content in that workspace. This is workflow blinding, not access control: the creator can still navigate to Review first, so sealed-corpus discipline or future exposure tracking is required.
 
 ## Local web boundary
 
-The web application binds only to 127.0.0.1, disables CORS, validates Host and Origin, and requires a random per-server-session token for mutating requests. It serves recordings and artifacts only by opaque database IDs after containment checks and supports bounded byte-range reads.
+The web application binds only to 127.0.0.1, disables CORS, validates Host and Origin, and requires a random per-server-session token for mutating requests. Only integrity-verified `review_proxy` and `export` artifacts are served by opaque database ID with containment checks and bounded byte ranges; originals, analysis audio, evaluator responses, and other private artifacts are rejected.
 
-Transcript, Creator Profile, evidence, and model-generated content are rendered as text rather than trusted HTML. SQL is parameterized. Logs are bounded and rotated, avoid full transcripts by default, and never contain secrets or model-provider credentials.
+Transcript, Creator Profile, evidence, and model-generated content are rendered as text rather than trusted HTML. SQL is parameterized. Successful worker request/result files containing transcript text are deleted immediately. Log size rotation is not yet implemented, so logs remain private Work Directory diagnostics and should be included in the retention hardening pass.
 
 ## Backup and recovery
 
-The application provides:
+The application provides consistent backup creation, portable creator-label export, verification, and restore. Restore is a stopped-app operation: it verifies the selected source, refuses a recorded active operation, creates a consistent pre-restore backup when the current database is healthy (or preserves corrupt/unmigrated database/WAL/SHM files best-effort), atomically installs the snapshot, applies migrations, and runs integrity checks. Application-specific retention/cleanup remains:
 
 - a consistent local SQLite snapshot using SQLite's backup API, written beneath the Work Directory by default and optionally copied and verified at a user-selected external destination;
 - a portable versioned label package containing Source Recording hash/time manifest, Creator Profile and Reference Moment revisions, relevant Analysis Run/model/config identity, immutable Clip Proposal contents and evidence links, Queue Snapshot ranks, Editorial Decision revisions, Boundary Edits, and artifact hashes;
-- an integrity check and restore verification path;
+- a verified restore path with pre-restore safety preservation;
 - app-specific cleanup that distinguishes valuable data from disposable caches and partial outputs.
 
 Recordings and rendered media are not duplicated by the metadata backup. Their hashes and expected relative paths make missing files detectable. Cleanup may garbage-collect regenerable derived bytes no longer referenced by an active/reviewed generation after a configured retention period, while preserving lineage, editorial history, exports, and the ability to report what was removed. The application never recommends Git cleanup commands for Work Directory maintenance.

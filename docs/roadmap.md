@@ -17,6 +17,8 @@ This sequence narrows the first release without narrowing the architecture.
 
 ## Milestone 1: trustworthy local review loop
 
+Current implementation evidence and remaining gates are tracked in [Implementation status](./implementation-status.md); roadmap bullets are product scope, not automatic completion claims.
+
 - Immutable local Source Recording import and Source Time alignment.
 - Review proxy and analysis audio.
 - Finnish/English code-switching ASR.
@@ -25,7 +27,7 @@ This sequence narrows the first release without narrowing the architecture.
 - Structured local semantic evaluation and variable boundaries.
 - Transparent ordering, diversity, immutable Queue Snapshots, and human review.
 - Source-aspect export from the original.
-- Append-only learning data, portable annotation backup, and reproducible evaluation.
+- Append-only learning data, portable annotation backup, and deterministic single-run evaluation; cross-recording experiment aggregation remains before promotion.
 
 Milestone 1 is text/audio-first. It does not claim to be multimodal or learned-personalized; it creates the reliable system and data those capabilities require.
 
